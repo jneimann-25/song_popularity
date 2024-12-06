@@ -1,0 +1,371 @@
+---
+title: "Models"
+author: "Jonathan Neimann"
+date: "2024-12-04"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+#null model 
+
+mean_popularity <- mean(spotify30k$track_popularity, na.rm = TRUE)
+spotify30k$null_prediction <- mean_popularity
+mean_popularity
+
+# Calculate residuals
+spotify30k$residuals <- spotify30k$track_popularity - spotify30k$null_prediction
+
+# Mean Squared Error (MSE)
+mse <- mean(spotify30k$residuals^2, na.rm = TRUE)
+
+# Root Mean Squared Error (RMSE)
+rmse <- sqrt(mse)
+
+# Mean Absolute Error (MAE)
+mae <- mean(abs(spotify30k$residuals), na.rm = TRUE)
+
+# Print metrics
+cat("MSE:", mse, "\n")
+cat("RMSE:", rmse, "\n")
+cat("MAE:", mae, "\n")
+
+null_model <- lm(track_popularity ~ 1, data = spotify30k)
+summary(null_model)
+
+```
+
+```{r}
+#simple linear model
+
+simple_model <- lm(track_popularity ~ danceability + energy + valence, data = spotify30k)
+summary(simple_model)
+```
+```{r}
+plot(simple_model$residuals, main = "Residuals of Simple Model", ylab = "Residuals", xlab = "Index")
+abline(h = 0, col = "red")
+```
+4. Model Fit
+Residual Standard Error (RSE): 24.79
+
+Slightly better than the null model (24.99).
+R² (Multiple R-squared): 0.01615
+
+Only ~1.6% of the variance in track_popularity is explained by this model.
+This is very low, indicating a weak relationship between the predictors and the target variable.
+Adjusted R²: 0.01606
+
+Adjusted for the number of predictors; similarly low.
+F-statistic: 179.1 (p-value < 2.2e-16)
+
+The overall model is statistically significant, meaning at least one predictor has a significant relationship with track_popularity.
+5. Comparison to Null Model
+Null Model R²: 0 (explains no variance).
+This Model R²: 0.01615 (explains ~1.6% of variance).
+There’s a slight improvement, but the low R² suggests the predictors (danceability, energy, valence) alone are not strong determinants of track_popularity.
+
+```{r}
+#add genre
+
+# Build the extended model
+extended_model <- lm(track_popularity ~ danceability + energy + valence +
+                     loudness + instrumentalness + factor(playlist_genre), data = spotify30k)
+
+# View the summary
+summary(extended_model)
+```
+```{r}
+library(rstanarm)
+interaction_model <- lm(track_popularity ~ danceability * energy +
+                        valence * factor(playlist_genre) + loudness +
+                        instrumentalness, data = spotify30k)
+
+stan_interaction_model = stan_glm(track_popularity ~ danceability * energy +
+                        valence * factor(playlist_genre) + loudness +
+                        instrumentalness, data = spotify30k, family='gaussian')
+# View the summary
+summary(interaction_model)
+summary(stan_interaction_model)
+```
+```{r}
+anova(simple_model, extended_model, interaction_model)
+
+# Compare AIC
+AIC(simple_model, extended_model, interaction_model)
+```
+```{r}
+plot(interaction_model$residuals, main = "Residuals of Interaction Model", ylab = "Residuals", xlab = "Index")
+abline(h = 0, col = "red")
+```
+```{r}
+predicted <- predict(interaction_model, newdata = spotify30k)
+
+# Residuals
+residuals <- spotify30k$track_popularity - predicted
+
+# Compute metrics
+mse <- mean(residuals^2, na.rm = TRUE)
+rmse <- sqrt(mse)
+mae <- mean(abs(residuals), na.rm = TRUE)
+
+# Print metrics
+cat("MSE:", mse, "\n")
+cat("RMSE:", rmse, "\n")
+cat("MAE:", mae, "\n")
+```
+```{r}
+qqnorm(interaction_model$residuals, main = "Q-Q Plot of Residuals")
+qqline(interaction_model$residuals, col = "red")  # Add reference line
+hist(interaction_model$residuals, main = "Histogram of Residuals", xlab = "Residuals", col = "skyblue", breaks = 30)
+
+pp_check(stan_interaction_model)
+```
+
+
+#Key influence on popularity 
+
+```{r}
+spotify30k$key <- factor(spotify30k$key)
+
+# Model with key as a categorical variable
+key_model <- lm(track_popularity ~ key, data = spotify30k)
+
+# Summary of the model
+summary(key_model)
+```
+Model 3: key (Categorical)
+Intercept: 43.1498 → The predicted track_popularity for the reference key (Key 0, "C") is 43.15.
+Coefficients:
+These represent the change in track_popularity relative to the reference key ("C"):
+Key 7 (-2.22): Tracks in Key 7 ("G") are associated with a ~2.22-point decrease in popularity (significant at p < 0.001).
+Key 8 (+1.49): Tracks in Key 8 ("G♯/A♭") are associated with a ~1.49-point increase in popularity (significant at p < 0.05).
+Other keys have coefficients that are not statistically significant, indicating no strong relationship with track_popularity relative to Key 0.
+RSE: 24.98 → Almost identical to the null model.
+R²: 0.001287 → This model explains only ~0.13% of the variance in track_popularity.
+F-statistic: 3.833 (p = 1.532e-05) → The overall model is statistically significant, but the practical effect is minimal.
+Takeaway:
+While key as a categorical variable is statistically significant, its practical contribution to explaining track_popularity is negligible.
+```{r}
+spotify30k$key <- factor(spotify30k$key)
+
+# Model with key and other predictors
+complex_model <- lm(track_popularity ~ danceability + energy + valence + key, data = spotify30k)
+
+# Summary of the model
+summary(complex_model)
+```
+Significant Predictors:
+danceability (7.21):
+A 1-unit increase in danceability is associated with a ~7.21-point increase in track_popularity.
+energy (-15.34):
+A 1-unit increase in energy is associated with a ~15.34-point decrease in track_popularity.
+valence (3.89):
+A 1-unit increase in valence is associated with a ~3.89-point increase in track_popularity.
+key7 ("G"):
+Tracks in Key 7 ("G") are associated with a ~1.97-point decrease in track_popularity compared to Key 0 ("C").
+key8 ("G♯/A♭"):
+Tracks in Key 8 ("G♯/A♭") are associated with a ~1.72-point increase in track_popularity compared to Key 0 ("C").
+3. Model Fit
+Residual Standard Error (RSE): 24.78
+Slight improvement over the audio-only model (24.79).
+R²: 0.01726
+This model explains ~1.73% of the variance in track_popularity.
+Still very low, indicating a weak relationship overall.
+Adjusted R²: 0.01684
+Adjusted for the number of predictors; similar to R².
+F-statistic: 41.05 (p < 2.2e-16)
+The overall model is statistically significant.
+Comparison to Previous Models
+Model	R²	Adjusted R²	RSE
+Null Model	0	-	24.99
+Audio Features	0.01615	0.01606	24.79
+Key Only	0.001287	0.0009512	24.98
+Combined Model	0.01726	0.01684	24.78
+The combined model provides the best performance so far, though the improvement is minimal. The key variable adds some predictive power, particularly Keys 7 and 8, but the overall explained variance remains very low.
+
+```{r}
+plot(complex_model$residuals, main = "Residuals of Combined Model", ylab = "Residuals", xlab = "Index")
+abline(h = 0, col = "red")
+```
+
+#Numerical Values 
+```{r}
+# Identify numeric columns
+numeric_vars <- spotify30k %>% select_if(is.numeric)
+
+# Initialize an empty data frame for storing correlations
+cor_results <- data.frame(var1 = character(), var2 = character(), correlation = numeric())
+
+# Compute correlations iteratively
+for (i in 1:(ncol(numeric_vars) - 1)) {
+  for (j in (i + 1):ncol(numeric_vars)) {
+    cor_value <- cor(numeric_vars[[i]], numeric_vars[[j]], use = "complete.obs")
+    cor_results <- rbind(cor_results, 
+                         data.frame(var1 = colnames(numeric_vars)[i],
+                                    var2 = colnames(numeric_vars)[j],
+                                    correlation = cor_value))
+  }
+}
+
+# Display the top correlated pairs
+cor_results <- cor_results %>% arrange(desc(abs(correlation)))
+head(cor_results, 10)
+```
+
+```{r}
+track_popularity_corr <- sapply(numeric_vars, function(x) cor(x, spotify30k$track_popularity, use = "complete.obs"))
+
+# Create a data frame for easier interpretation
+track_popularity_corr_df <- data.frame(
+  variable = names(track_popularity_corr),
+  correlation = track_popularity_corr
+)
+
+# Sort by absolute correlation values (strongest relationships first)
+track_popularity_corr_df <- track_popularity_corr_df %>%
+  arrange(desc(abs(correlation)))
+
+# Display the results
+print(track_popularity_corr_df)
+```
+
+```{r}
+# Subset categorical variables
+categorical_vars <- spotify30k %>% select_if(is.character)
+
+# Perform chi-square test for selected variables
+chi_sq <- chisq.test(table(categorical_vars$playlist_genre, categorical_vars$playlist_subgenre))
+
+# Check results
+chi_sq
+```
+```{r}
+# Create contingency table
+genre_subgenre_table <- table(spotify30k$playlist_genre, spotify30k$playlist_subgenre)
+
+# Convert to a data frame for ggplot
+heatmap_data <- as.data.frame(as.table(genre_subgenre_table))
+
+# Plot heatmap
+ggplot(heatmap_data, aes(x = Var1, y = Var2, fill = Freq)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "blue") +
+  labs(title = "Playlist Genre vs Subgenre", x = "Playlist Genre", y = "Playlist Subgenre") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+```{r}
+ggplot(spotify30k, aes(x = instrumentalness, y = track_popularity, color = playlist_genre)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", color = "black") +
+  labs(title = "Track Popularity vs Instrumentalness (by Playlist Genre)", 
+       x = "Instrumentalness", y = "Track Popularity") +
+  theme_minimal()
+
+# Scatterplot: track_popularity vs duration_ms
+ggplot(spotify30k, aes(x = duration_ms, y = track_popularity, color = playlist_genre)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", color = "black") +
+  labs(title = "Track Popularity vs Duration (ms) (by Playlist Genre)", 
+       x = "Duration (ms)", y = "Track Popularity") +
+  theme_minimal()
+
+# Scatterplot: track_popularity vs energy
+ggplot(spotify30k, aes(x = energy, y = track_popularity, color = playlist_genre)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", color = "black") +
+  labs(title = "Track Popularity vs Energy (by Playlist Genre)", 
+       x = "Energy", y = "Track Popularity") +
+  theme_minimal()
+
+```
+```{r}
+# Density plot for acousticness and track_popularity
+ggplot(spotify30k, aes(x = acousticness)) +
+  geom_density(fill = "skyblue", alpha = 0.5) +
+  facet_wrap(~ cut(track_popularity, breaks = c(0, 25, 50, 75, 100)), scales = "free_y") +
+  labs(title = "Density of Acousticness Across Popularity Levels", 
+       x = "Acousticness", y = "Density")
+
+# Density plot for instrumentalness and track_popularity
+ggplot(spotify30k, aes(x = instrumentalness)) +
+  geom_density(fill = "orange", alpha = 0.5) +
+  facet_wrap(~ cut(track_popularity, breaks = c(0, 25, 50, 75, 100)), scales = "free_y") +
+  labs(title = "Density of Instrumentalness Across Popularity Levels", 
+       x = "Instrumentalness", y = "Density")
+```
+#Categorical Values 
+
+```{r}
+# Summary statistics: Average track_popularity by playlist_genre
+genre_summary <- spotify30k %>%
+  group_by(playlist_genre) %>%
+  summarize(mean_popularity = mean(track_popularity, na.rm = TRUE),
+            sd_popularity = sd(track_popularity, na.rm = TRUE),
+            count = n()) %>%
+  arrange(desc(mean_popularity))
+
+print(genre_summary)
+```
+```{r}
+ggplot(spotify30k, aes(x = playlist_genre, y = track_popularity, fill = playlist_genre)) +
+  geom_boxplot(outlier.alpha = 0.2) +
+  labs(title = "Track Popularity Across Playlist Genres", 
+       x = "Playlist Genre", y = "Track Popularity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(spotify30k, aes(x = playlist_subgenre, y = track_popularity, fill = playlist_subgenre)) +
+  geom_boxplot(outlier.alpha = 0.2) +
+  labs(title = "Track Popularity Across Playlist Subgenres", 
+       x = "Playlist Subgenre", y = "Track Popularity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+```{r}
+anova_genre <- aov(track_popularity ~ playlist_genre, data = spotify30k)
+summary(anova_genre)
+
+kruskal_genre <- kruskal.test(track_popularity ~ playlist_genre, data = spotify30k)
+print(kruskal_genre)
+```
+ANOVA Results:
+F-value (207.5):
+
+The F-value is large, indicating substantial variability in track_popularity explained by playlist_genre.
+This suggests that the genre significantly influences popularity.
+P-value (< 2e-16):
+
+The extremely low p-value shows that the differences in mean track_popularity across genres are statistically significant.
+Kruskal-Wallis Test Results:
+Chi-squared (1133.2):
+
+This confirms significant differences in track_popularity rankings across genres.
+P-value (< 2.2e-16):
+
+The results are consistent with the ANOVA, confirming that genre impacts popularity even when accounting for non-normality.
+
+#Track artist
+
+```{r}
+# ANOVA test
+anova_artist <- aov(track_popularity ~ track_artist, data = spotify30k)
+summary(anova_artist)
+```
+
+## mixed effects model 
+```{r}
+library(lme4)
+
+# Mixed-effects model with track_artist as a random effect
+model <- lmer(track_popularity ~ (1 | track_artist), data = spotify30k)
+
+# Check variance explained by track_artist
+summary(model)
+```
+
+
+
+

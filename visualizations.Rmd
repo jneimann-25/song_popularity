@@ -1,0 +1,302 @@
+---
+title: "visualization"
+author: "Jonathan Neimann"
+date: "2024-12-03"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+spotify_streams = read.csv("Spotify Most Streamed Songs.csv")
+spotify_streams$streams <- as.numeric(spotify_streams$streams)
+
+song_popularity = read.csv("song_popularity.csv")
+spotify2023 = read.csv("spotify-2023.csv")
+spotify2023$streams = as.numeric(spotify2023$streams)
+
+spotify_data = read.csv("spotify_data.csv")
+spotify_data <- spotify_data[grepl("[a-zA-Z]", spotify_data$artist_name), ]
+
+spotify30k = read.csv("spotify_songs.csv")
+spotify30k <- spotify30k[grepl("[a-zA-Z]", spotify30k$track_artist), ]
+```
+
+```{r}
+library(dplyr)
+spotify30k %>%
+  group_by(track_artist) %>%
+  summarize(avg_popularity = mean(track_popularity, na.rm = TRUE)) %>%
+  arrange(desc(avg_popularity)) %>%
+  head(10)
+
+```
+
+```{r}
+#popularity distribution
+hist(spotify30k$track_popularity, 
+     main = "Distribution of Track Popularity", 
+     xlab = "Track Popularity", 
+     col = "blue")
+```
+```{r}
+hist(spotify_data$popularity, 
+     main = "Distribution of Track Popularity", 
+     xlab = "Track Popularity", 
+     col = "blue")
+```
+```{r}
+#correlation heatmap
+library(corrplot)
+corr_data <- spotify30k %>%
+  select(track_popularity, danceability, energy, loudness, valence, tempo) %>%
+  cor(use = "complete.obs")
+corrplot(corr_data, method = "color")
+```
+```{r}
+#dancability affect on popularity
+library(ggplot2)
+ggplot(spotify30k, aes(x = danceability, y = track_popularity)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", col = "red") +
+  labs(title = "Danceability vs Track Popularity")
+```
+```{r}
+#genre trends
+spotify30k %>%
+  group_by(playlist_genre) %>%
+  summarize(avg_popularity = mean(track_popularity, na.rm = TRUE)) %>%
+  arrange(desc(avg_popularity))
+```
+```{r}
+#genre distributions
+ggplot(spotify30k, aes(x = playlist_genre, y = danceability, fill = playlist_genre)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Danceability Across Genres", x = "Genre", y = "Danceability")
+```
+```{r}
+#audio features clusters
+library(cluster)
+features <- spotify30k %>%
+  select(danceability, energy, loudness, valence, tempo) %>%
+  scale()  # Standardize data
+
+kmeans_result <- kmeans(features, centers = 5)
+spotify30k$cluster <- kmeans_result$cluster
+
+ggplot(spotify30k, aes(x = danceability, y = energy, color = factor(cluster))) +
+  geom_point(alpha = 0.6) +
+  labs(title = "Clustering Tracks by Audio Features", color = "Cluster")
+
+```
+```{r}
+#live vs studio
+spotify30k <- spotify30k %>%
+  mutate(recording_type = ifelse(liveness > 0.8, "Live", "Studio"))
+
+ggplot(spotify30k, aes(x = recording_type, y = track_popularity, fill = recording_type)) +
+  geom_boxplot() +
+  labs(title = "Popularity: Live vs Studio Recordings", x = "Recording Type", y = "Popularity")
+```
+```{r}
+#tempo popularity
+spotify30k <- spotify30k %>%
+  mutate(tempo_category = cut(tempo, breaks = c(0, 90, 120, Inf), 
+                              labels = c("Slow", "Medium", "Fast")))
+
+ggplot(spotify30k, aes(x = tempo_category, y = track_popularity, fill = tempo_category)) +
+  geom_boxplot() +
+  labs(title = "Popularity by Tempo Category", x = "Tempo Category", y = "Popularity")
+```
+
+```{r}
+#dancability distribution 
+hist(spotify30k$danceability, 
+     main = "Distribution of Danceability", 
+     xlab = "Danceability", 
+     col = "skyblue", 
+     border = "white", 
+     breaks = 20)
+```
+```{r}
+hist(spotify_data$danceability, 
+     main = "Distribution of Danceability", 
+     xlab = "Danceability", 
+     col = "skyblue", 
+     border = "white", 
+     breaks = 20)
+```
+```{r}
+plot(density(spotify30k$danceability, na.rm = TRUE), 
+     main = "Density Plot of Danceability", 
+     xlab = "Danceability", 
+     col = "blue")
+```
+
+```{r}
+plot(density(spotify30k$tempo, na.rm = TRUE), 
+     main = "Density Plot of Tempo", 
+     xlab = "Tempo (BPM)", 
+     col = "pink")
+```
+```{r}
+spotify30k <- spotify30k %>%
+  mutate(tempo_category = cut(tempo, breaks = c(0, 90, 120, Inf), 
+                              labels = c("Slow", "Medium", "Fast")))
+
+ggplot(spotify30k, aes(x = tempo_category, fill = tempo_category)) +
+  geom_bar() +
+  labs(title = "Count of Tracks by Tempo Category", x = "Tempo Category", y = "Count")
+```
+```{r}
+ggplot(spotify30k, aes(x = acousticness, fill = playlist_genre)) +
+  geom_density(alpha = 0.6) +
+  labs(title = "Acousticness by Genre", x = "Acousticness", y = "Density") +
+  theme(legend.position = "bottom")
+
+ggplot(spotify30k, aes(x = danceability, fill = playlist_genre)) +
+  geom_density(alpha = 0.6) +
+  labs(title = "Danceability by Genre", x = "Danceability", y = "Density") +
+  theme(legend.position = "bottom")
+```
+```{r}
+spotify30k <- spotify30k %>%
+  mutate(is_instrumental = ifelse(instrumentalness > 0.5, "Instrumental", "Non-Instrumental"))
+
+ggplot(spotify30k, aes(x = is_instrumental, fill = is_instrumental)) +
+  geom_bar() +
+  labs(title = "Count of Instrumental vs Non-Instrumental Tracks", x = "", y = "Count")
+```
+```{r}
+ggplot(spotify30k, aes(x = factor(mode, labels = c("Minor", "Major")), fill = factor(mode))) +
+  geom_bar() +
+  labs(title = "Distribution of Mode (Major vs Minor)", x = "Mode", y = "Count") +
+  theme(legend.position = "none")
+```
+```{r}
+#key mapping 
+key_mapping <- c("C", "C♯/D♭", "D", "D♯/E♭", "E", "F", "F♯/G♭", "G", "G♯/A♭", "A", "A♯/B♭", "B")
+spotify30k$key_label <- key_mapping[spotify30k$key + 1]
+
+key_counts <- table(spotify30k$key_label)
+barplot(key_counts, 
+        main = "Distribution of Musical Keys", 
+        xlab = "Key", 
+        ylab = "Count", 
+        col = "lightblue", 
+        las = 2)
+```
+```{r}
+pie(key_counts, 
+    main = "Proportion of Musical Keys", 
+    col = rainbow(length(key_counts)))
+```
+```{r}
+library(dplyr)
+avg_popularity_by_key <- spotify30k %>%
+  group_by(key_label) %>%
+  summarize(avg_popularity = mean(track_popularity, na.rm = TRUE))
+
+ggplot(avg_popularity_by_key, aes(x = reorder(key_label, avg_popularity), y = avg_popularity, fill = key_label)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Average Popularity by Musical Key", x = "Key", y = "Average Popularity") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+```{r}
+ggplot(spotify30k, aes(x = key_label, y = danceability, fill = key_label)) +
+  geom_boxplot() +
+  labs(title = "Danceability Across Musical Keys", x = "Key", y = "Danceability") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none")
+```
+
+```{r}
+avg_tempo_by_key <- spotify30k %>%
+  group_by(key_label) %>%
+  summarize(avg_tempo = mean(tempo, na.rm = TRUE))
+
+ggplot(avg_tempo_by_key, aes(x = key_label, y = avg_tempo, group = 1)) +
+  geom_line(color = "blue") +
+  geom_point(size = 2, color = "red") +
+  labs(title = "Average Tempo by Musical Key", x = "Key", y = "Tempo (BPM)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+```{r}
+ggplot(spotify30k, aes(x = key_label, fill = factor(mode, labels = c("Minor", "Major")))) +
+  geom_bar(position = "dodge") +
+  labs(title = "Key Distribution by Mode", x = "Key", y = "Count", fill = "Mode") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+```{r}
+avg_popularity_key_mode <- spotify30k %>%
+  group_by(key_label, mode = factor(mode, labels = c("Minor", "Major"))) %>%
+  summarize(avg_popularity = mean(track_popularity, na.rm = TRUE)) %>%
+  ungroup()
+
+ggplot(avg_popularity_key_mode, aes(x = key_label, y = mode, fill = avg_popularity)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +
+  labs(title = "Average Popularity by Key and Mode", x = "Key", y = "Mode", fill = "Popularity") +
+  theme_minimal()
+```
+```{r}
+ggplot(spotify30k, aes(x = track_popularity, fill = playlist_genre)) +
+  geom_density(alpha = 0.6) +
+  labs(title = "Popularity by Genre", 
+       x = "Track Popularity", 
+       y = "Density") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+```{r}
+library(dplyr)
+
+# Count the number of tracks per genre
+top_genres <- spotify30k %>%
+  group_by(playlist_genre) %>%
+  summarize(count = n()) %>%
+  arrange(desc(count))  # Sort by count, descending
+
+# View the result
+top_genres
+```
+```{r}
+top_genres <- c("edm", "rap", "pop")  # Top genres
+filtered_data <- spotify30k %>% filter(playlist_genre %in% top_genres)
+
+ggplot(filtered_data, aes(x = track_popularity, fill = playlist_genre)) +
+  geom_density(alpha = 0.6) +
+  labs(title = "Track Popularity by Top Genres", x = "Track Popularity", y = "Density") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+```{r}
+top_genre_counts <- data.frame(
+  genre = c("edm", "rap", "pop", "r&b", "latin", "rock"),
+  count = c(6043, 5721, 5499, 5404, 5153, 4910)
+)
+
+ggplot(top_genre_counts, aes(x = reorder(genre, -count), y = count, fill = genre)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top Genres by Track Count", x = "Genre", y = "Count") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+```{r}
+top_genre_popularity <- filtered_data %>%
+  group_by(playlist_genre) %>%
+  summarize(avg_popularity = mean(track_popularity, na.rm = TRUE)) %>%
+  arrange(desc(avg_popularity))
+
+print(top_genre_popularity)
+```
+
+```{r}
+ggplot(spotify_data, aes(x = danceability, fill = genre)) +
+  geom_density(alpha = 0.6) +
+  labs(title = "Danceability by Genre", x = "Danceability", y = "Density") +
+  theme(legend.position = "bottom")
+```
+
