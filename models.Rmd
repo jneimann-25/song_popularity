@@ -282,6 +282,13 @@ ggplot(spotify30k, aes(x = energy, y = track_popularity, color = playlist_genre)
        x = "Energy", y = "Track Popularity") +
   theme_minimal()
 
+ggplot(spotify30k, aes(x = danceability, y = track_popularity, color = playlist_genre)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", color = "black") +
+  labs(title = "Track Popularity vs Danceability (by Playlist Genre)", 
+       x = "Danceability", y = "Track Popularity") +
+  theme_minimal()
+
 ```
 ```{r}
 # Density plot for acousticness and track_popularity
@@ -367,5 +374,206 @@ summary(model)
 ```
 
 
+The results of your linear mixed-effects model provide valuable insights into the influence of track_artist on track_popularity:
 
+Key Findings:
+Random Effects (Variance Explained by track_artist):
+
+Variance (187.9): This shows that the variance in track_popularity attributable to differences between artists is substantial.
+Residual Variance (394.1): The remaining variance not explained by the model is still larger, indicating other factors influence track_popularity.
+Proportion of Variance Explained: The variance explained by track_artist can be calculated as:
+
+\text{Proportion} = \frac{\text{Variance due to `track_artist`}}{\text{Total Variance}} = \frac{187.9}{187.9 + 394.1} \approx 32\%
+This means track_artist accounts for about 32% of the total variance in track_popularity.
+
+Fixed Effect (Intercept):
+
+Estimate (38.889): This represents the overall average track popularity across all artists in the dataset.
+The fixed effect does not include any predictors beyond the random effect of track_artist.
+Number of Artists (Groups):
+
+There are 10,666 unique artists in the dataset. The substantial number of groups reinforces the diversity of your data but also suggests that dominant artists could skew results.
+Interpretation:
+Significant Influence of track_artist: The random effects variance (187.9) is large, confirming that track_artist has a meaningful impact on track_popularity. Certain artists may consistently produce tracks with higher or lower popularity, creating skew in the data.
+
+Residual Variance: Despite the influence of track_artist, much of the variability (394.1) remains unexplained, indicating that other predictors (e.g., genre, subgenre, audio features) are also important.
+
+
+The results of your linear mixed-effects model provide valuable insights into the influence of track_artist on track_popularity:
+
+Key Findings:
+Random Effects (Variance Explained by track_artist):
+
+Variance (187.9): This shows that the variance in track_popularity attributable to differences between artists is substantial.
+Residual Variance (394.1): The remaining variance not explained by the model is still larger, indicating other factors influence track_popularity.
+Proportion of Variance Explained: The variance explained by track_artist can be calculated as:
+
+\text{Proportion} = \frac{\text{Variance due to `track_artist`}}{\text{Total Variance}} = \frac{187.9}{187.9 + 394.1} \approx 32\%
+This means track_artist accounts for about 32% of the total variance in track_popularity.
+
+Fixed Effect (Intercept):
+
+Estimate (38.889): This represents the overall average track popularity across all artists in the dataset.
+The fixed effect does not include any predictors beyond the random effect of track_artist.
+Number of Artists (Groups):
+
+There are 10,666 unique artists in the dataset. The substantial number of groups reinforces the diversity of your data but also suggests that dominant artists could skew results.
+Interpretation:
+Significant Influence of track_artist: The random effects variance (187.9) is large, confirming that track_artist has a meaningful impact on track_popularity. Certain artists may consistently produce tracks with higher or lower popularity, creating skew in the data.
+
+Residual Variance: Despite the influence of track_artist, much of the variability (394.1) remains unexplained, indicating that other predictors (e.g., genre, subgenre, audio features) are also important.
+
+Next Steps:
+Assess the Impact of Top Artists: Identify artists with consistently high track_popularity and consider their influence:
+
+```{r}
+artist_summary <- spotify30k %>%
+  group_by(track_artist) %>%
+  summarize(mean_popularity = mean(track_popularity, na.rm = TRUE),
+            count = n()) %>%
+  arrange(desc(mean_popularity))
+print(head(artist_summary, 10))
+```
+
+```{r}
+full_model <- lmer(track_popularity ~ energy + danceability + (1 | track_artist), data = spotify30k)
+summary(full_model)
+```
+
+
+```{r}
+# Calculate artist-level mean popularity
+artist_means <- spotify30k %>%
+  group_by(track_artist) %>%
+  summarize(artist_mean_popularity = mean(track_popularity, na.rm = TRUE))
+
+# Merge back and calculate residual popularity
+spotify30k <- spotify30k %>%
+  left_join(artist_means, by = "track_artist") %>%
+  mutate(residual_popularity = track_popularity - artist_mean_popularity)
+
+# Use residual popularity as the target variable
+residual_model <- lm(residual_popularity ~ energy + danceability, data = spotify30k)
+summary(residual_model)
+```
+
+Here’s a breakdown of your new model using residual_popularity as the target variable:
+
+Key Results:
+Residuals:
+
+The residuals range from -83.13 to 67.76, indicating variability in how well the model explains residual_popularity.
+The median residual is close to zero, which is a good sign that the model is not biased.
+Coefficients:
+
+Intercept (0.8960, p = 0.12284):
+Not statistically significant. The average residual_popularity when energy and danceability are 0 is close to zero, as expected after adjusting for artist-level effects.
+Energy (-3.2436, p < 0.001):
+Significant negative effect: As energy increases by 1 unit, residual_popularity decreases by about 3.24 points. This aligns with your earlier findings that energy has a slight negative impact on popularity.
+Danceability (2.0922, p = 0.00105):
+Significant positive effect: As danceability increases by 1 unit, residual_popularity increases by about 2.09 points. This supports the idea that more danceable tracks tend to be more popular.
+Model Fit:
+
+Residual Standard Error (16.71):
+The residuals are relatively large compared to the scale of the dependent variable, suggesting there’s still a lot of unexplained variability.
+R-squared (0.001673):
+Extremely low. This means that the model explains only 0.17% of the variance in residual_popularity. This suggests that energy and danceability alone are not strong predictors of popularity after accounting for artist effects.
+F-statistic (27.42, p < 0.001):
+The overall model is statistically significant, but the explained variance is still minimal.
+Interpretation:
+Artist-Level Adjustment:
+
+By subtracting artist_mean_popularity, you removed the dominance of track_artist from the model, allowing energy and danceability to directly predict popularity differences within an artist's tracks.
+Predictor Effects:
+
+Energy and danceability have statistically significant effects, but their practical importance is limited given the low R-squared value.
+Low Explained Variance:
+
+The low R-squared indicates that many other factors (e.g., genre, subgenre, marketing, lyrics) likely play a role in track popularity that are not captured by energy and danceability.
+
+```{r}
+# Convert interaction_model to a mixed-effects model
+interaction_mixed_model <- lmer(track_popularity ~ danceability * energy +
+                                  valence * factor(playlist_genre) +
+                                  loudness + instrumentalness +
+                                  (1 | track_artist), 
+                                data = spotify30k)
+
+# Summary of the mixed-effects model
+summary(interaction_mixed_model)
+```
+
+```{r}
+library(car)
+vif(interaction_mixed_model)
+```
+
+```{r}
+complete_pooling_model <- lm(track_popularity ~ danceability * energy +
+                             valence + loudness + instrumentalness,
+                             data = spotify30k)
+summary(complete_pooling_model)
+```
+```{r}
+best_model <- lmer(track_popularity ~ danceability * energy +
+                     valence * factor(playlist_genre) +
+                     loudness + instrumentalness +
+                     (1 | track_artist), 
+                   data = spotify30k)
+
+# Evaluate the model
+summary(best_model)
+```
+```{r}
+
+genre_models <- spotify30k %>%
+  group_by(playlist_genre) %>%
+  group_map(~ lm(track_popularity ~ danceability * energy +
+                 valence + loudness + instrumentalness, data = .x))
+
+# Print summary of one model (e.g., for the first genre)
+summary(genre_models[[1]])
+```
+```{r}
+maybe_best_model = lm(track_popularity ~ danceability * energy +
+                        valence * factor(playlist_genre) +
+                        instrumentalness +
+                        loudness +
+                        acousticness +
+                        duration_ms, data = spotify30k)
+
+summary(maybe_best_model)
+```
+
+```{r}
+# Correlation for mode (binary variable)
+cor(spotify30k$track_popularity, spotify30k$mode, use = "complete.obs")
+
+# Summary of track_popularity by key
+aggregate(track_popularity ~ key, data = spotify30k, mean)
+```
+```{r}
+model_with_key <- lm(track_popularity ~ danceability * energy +
+                                      valence * factor(playlist_genre) +
+                                      instrumentalness +
+                                      loudness +
+                                      acousticness +
+                                      duration_ms +
+                                      factor(key), 
+                     data = spotify30k)
+summary(model_with_key)
+```
+no big difference 
+
+```{r}
+model_with_key_interaction <- lm(track_popularity ~ factor(key) * factor(playlist_genre) +
+                                                 danceability * energy +
+                                                 instrumentalness +
+                                                 loudness +
+                                                 acousticness, 
+                                 data = spotify30k)
+summary(model_with_key_interaction)
+
+#this one is even worse
+```
 

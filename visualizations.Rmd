@@ -15,9 +15,6 @@ song_popularity = read.csv("song_popularity.csv")
 spotify2023 = read.csv("spotify-2023.csv")
 spotify2023$streams = as.numeric(spotify2023$streams)
 
-spotify_data = read.csv("spotify_data.csv")
-spotify_data <- spotify_data[grepl("[a-zA-Z]", spotify_data$artist_name), ]
-
 spotify30k = read.csv("spotify_songs.csv")
 spotify30k <- spotify30k[grepl("[a-zA-Z]", spotify30k$track_artist), ]
 ```
@@ -39,38 +36,57 @@ hist(spotify30k$track_popularity,
      xlab = "Track Popularity", 
      col = "blue")
 ```
+
 ```{r}
-hist(spotify_data$popularity, 
-     main = "Distribution of Track Popularity", 
-     xlab = "Track Popularity", 
-     col = "blue")
-```
-```{r}
+spotify_popularity <- spotify30k[spotify30k$track_popularity >= 5, ]
+spotify_popularity$playlist_factor <- as.factor(spotify_popularity$playlist_genre)
 #correlation heatmap
 library(corrplot)
-corr_data <- spotify30k %>%
-  select(track_popularity, danceability, energy, loudness, valence, tempo) %>%
+corr_data <- spotify_popularity %>%
+  select(track_popularity, danceability, energy, loudness, valence, tempo, duration_ms, liveness, instrumentalness, tempo, speechiness) %>%
   cor(use = "complete.obs")
+corrplot(corr_data, method = "color")
+
+artist_aggregated <- spotify_popularity %>%
+  group_by(track_artist) %>%
+  summarise(
+    avg_popularity = mean(track_popularity, na.rm = TRUE),
+    avg_danceability = mean(danceability, na.rm = TRUE),
+    avg_energy = mean(energy, na.rm = TRUE),
+    avg_loudness = mean(loudness, na.rm = TRUE),
+    avg_valence = mean(valence, na.rm = TRUE),
+    avg_tempo = mean(tempo, na.rm = TRUE)
+  )
+
+# Calculate the correlation matrix
+corr_data <- artist_aggregated %>%
+  select(avg_popularity, avg_danceability, avg_energy, avg_loudness, avg_valence, avg_tempo) %>%
+  cor(use = "complete.obs")
+
+# Create the correlation plot
 corrplot(corr_data, method = "color")
 ```
 ```{r}
 #dancability affect on popularity
 library(ggplot2)
-ggplot(spotify30k, aes(x = danceability, y = track_popularity)) +
+ggplot(spotify_popularity, aes(x = danceability, y = track_popularity)) +
   geom_point(alpha = 0.5) +
   geom_smooth(method = "lm", col = "red") +
   labs(title = "Danceability vs Track Popularity")
 ```
 ```{r}
 #genre trends
-spotify30k %>%
+spotify_popularity %>%
   group_by(playlist_genre) %>%
-  summarize(avg_popularity = mean(track_popularity, na.rm = TRUE)) %>%
+  summarize(
+    n = n(),
+    avg_popularity = mean(track_popularity, na.rm = TRUE)
+  ) %>%
   arrange(desc(avg_popularity))
 ```
 ```{r}
 #genre distributions
-ggplot(spotify30k, aes(x = playlist_genre, y = danceability, fill = playlist_genre)) +
+ggplot(spotify_popularity, aes(x = playlist_genre, y = track_popularity, fill = playlist_genre)) +
   geom_boxplot() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(title = "Danceability Across Genres", x = "Genre", y = "Danceability")
@@ -78,14 +94,14 @@ ggplot(spotify30k, aes(x = playlist_genre, y = danceability, fill = playlist_gen
 ```{r}
 #audio features clusters
 library(cluster)
-features <- spotify30k %>%
+features <- spotify_popularity %>%
   select(danceability, energy, loudness, valence, tempo) %>%
   scale()  # Standardize data
 
 kmeans_result <- kmeans(features, centers = 5)
-spotify30k$cluster <- kmeans_result$cluster
+spotify_popularity$cluster <- kmeans_result$cluster
 
-ggplot(spotify30k, aes(x = danceability, y = energy, color = factor(cluster))) +
+ggplot(spotify_popularity, aes(x = danceability, y = energy, color = factor(cluster))) +
   geom_point(alpha = 0.6) +
   labs(title = "Clustering Tracks by Audio Features", color = "Cluster")
 
@@ -119,14 +135,7 @@ hist(spotify30k$danceability,
      border = "white", 
      breaks = 20)
 ```
-```{r}
-hist(spotify_data$danceability, 
-     main = "Distribution of Danceability", 
-     xlab = "Danceability", 
-     col = "skyblue", 
-     border = "white", 
-     breaks = 20)
-```
+
 ```{r}
 plot(density(spotify30k$danceability, na.rm = TRUE), 
      main = "Density Plot of Danceability", 
@@ -160,6 +169,15 @@ ggplot(spotify30k, aes(x = danceability, fill = playlist_genre)) +
   labs(title = "Danceability by Genre", x = "Danceability", y = "Density") +
   theme(legend.position = "bottom")
 ```
+
+```{r}
+
+ggplot(spotify_popularity, aes(x = track_popularity, fill = playlist_genre)) +
+  geom_density(alpha = 0.6) +
+  labs(title = "Popularity by Genre", x = "Popularity", y = "Density") +
+  theme(legend.position = "bottom")
+```
+
 ```{r}
 spotify30k <- spotify30k %>%
   mutate(is_instrumental = ifelse(instrumentalness > 0.5, "Instrumental", "Non-Instrumental"))

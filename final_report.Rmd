@@ -1,0 +1,157 @@
+---
+title: "Final Report"
+author: "Jonathan Neimann"
+date: "2024-12-08"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(dplyr)
+spotify30k = read.csv("spotify_songs.csv")
+spotify30k <- spotify30k[grepl("[a-zA-Z]", spotify30k$track_artist), ]
+```
+
+# Abstract
+
+This study explores the relationship between various song attributes and their popularity on Spotify, leveraging a dataset of nearly 30,000 songs obtained from the Spotify API. Spotify calculates popularity using an algorithm primarily based on the total number of plays a track has had, the recency of those plays and is scaled form 0-100. The analysis focuses on understanding how specific audio features and contextual metadata—such as genre, acousticness, danceability, valence, duration, key, and mode—correlate with this track popularity. Through a combination of descriptive and inferential statistical methods, alongside data visualizations, key patterns in the data are highlighted. Predictive modeling techniques are employed to attempt to identify the most influential factors driving popularity, hopefully offering insights for artists, producers, and marketers aiming to enhance the appeal of their tracks in the competitive music streaming landscape.
+
+# Introduction
+
+The rapid evolution of music streaming platforms has revolutionized the way audiences consume music, with Spotify emerging as the leading player in this space. Spotify provides not only an extensive catalog of songs but also rich metadata and audio analysis for each track, offering a unique opportunity to study the factors that drive a song's popularity. Among these is track popularity, an algorithmically calculated metric primarily influenced by the total number of plays a track has received and the recency of those plays. This metric is measured on a 0-100 scale and provides valuable insights into user preferences and the dynamics of modern music consumption.
+
+This project comes from a place of personal interest, inspired by my academic background and passion for music. Having completed an undergraduate degree in music, I have long been fascinated by the interplay between musical composition and audience reception. My love for music and curiosity about how modern algorithms shape music discovery motivated me to undertake this project. The connection between audio attributes and commercial success represents a compelling intersection of art and data science, which I sought to explore through this work.
+
+Using the "30000 Spotify Songs" dataset from Kaggle, which includes nearly 30,000 tracks, this research focuses on understanding the relationship between key audio attributes and contextual factors that affect a track's popularity on Spotify. Attributes such as acousticness, danceability, valence, duration, key, and mode—derived from Spotify's audio analysis—describe intrinsic musical qualities. These features, combined with metadata such as genre provide a comprehensive framework to analyze patterns in popular music.
+
+Despite the rich dataset, challenges emerged during the analysis, particularly with incomplete or non-standardized metadata. The track_artist field, in particular, made it difficult to fully interpret the popularity metric. Addressing this issue required key emphasis on this variable.
+
+This research employs descriptive analytics, data visualization, and predictive modeling to identify trends and influential factors. The findings aim to shed light on how various song attributes offer insights for artists, producers, and marketers in crafting music that resonates with audiences. By exploring the interplay of musical characteristics and popularity, this project combines statistics and my passion for music to contribute to a deeper understanding of what makes a song successful in the competitive streaming landscape.
+
+# Method
+
+## Visualizations
+
+The first step of this process was to analyze the track_popularity metric from the dataset using various graphs to visualize the data and what we are dealing with. There were many different graphs I explored starting with the most basic of just graphing the density of the target variable. 
+
+```{r, echo=FALSE}
+#popularity distribution
+hist(spotify30k$track_popularity, 
+     main = "Distribution of Track Popularity", 
+     xlab = "Track Popularity", 
+     col = "blue")
+```
+
+We can see right away that there is a significant spike at the very lower ends of popularity and then a slightly left skewed distribution after that. I conducted some tests to determine the main driving force of this spike was track_artist and that within this sample of songs, some artists just did not have the same pull power of other artists in the dataset. Because of this I decided to eliminate all observations that had a track_populartity of below 5. Although this is eliminating some data (around 4000 observations) and created bias, I felt it was necessary to perform proper analysis as it reduces noise significantly and focuses on  on tracks with some level of audience engagement.
+
+Here is the resulting distribution for this dataset. 
+
+```{r, echo=FALSE}
+# Create a new dataframe where track_popularity is 5 or higher
+spotify_popularity <- spotify30k[spotify30k$track_popularity >= 5, ]
+
+hist(spotify_popularity$track_popularity, 
+     main = "Distribution of Track Popularity", 
+     xlab = "Track Popularity", 
+     col = "blue")
+
+```
+This now gives us a slightly normal distribution with a peak near the 50-60 range and a range of track_popularity now from 5-100. We will use this new filtered dataset for our analysis going forward. 
+
+### Numerical Variables
+
+Looking at the attributes in this dataset we have many to choose from. There are both numerical and categorical variables to consider. Features like tempo, daceability and duration are given as numbers, where as variables like genre, key and artist are categorical. Here is a list of some of the key variables in the datset and what they represent. 
+
+```{r, echo=FALSE}
+# Load the knitr package
+library(knitr)
+
+# Create a data frame for the data dictionary
+data_dictionary <- data.frame(
+  Variable = c(
+    "track_name", "track_artist", "track_popularity", "track_album_release_date", "playlist_name",
+    "playlist_genre", "playlist_subgenre", "danceability", "energy", "key", "loudness", "mode",
+    "speechiness", "acousticness", "instrumentalness", "liveness", "valence", "tempo", "duration_ms"
+  ),
+  Description = c(
+    "Song Name",
+    "Song Artist",
+    "Song Popularity (0-100) where higher is better",
+    "Date when album released",
+    "Name of playlist",
+    "Playlist genre",
+    "Playlist subgenre",
+    "Danceability describes how suitable a track is for dancing based on a combination of musical elements including tempo, rhythm stability, beat strength, and overall regularity. A value of 0.0 is least danceable and 1.0 is most danceable.",
+    "Energy is a measure from 0.0 to 1.0 and represents a perceptual measure of intensity and activity. Typically, energetic tracks feel fast, loud, and noisy. For example, death metal has high energy, while a Bach prelude scores low on the scale. Perceptual features contributing to this attribute include dynamic range, perceived loudness, timbre, onset rate, and general entropy.",
+    "The estimated overall key of the track. Integers map to pitches using standard Pitch Class notation . E.g. 0 = C, 1 = C♯/D♭, 2 = D, and so on. If no key was detected, the value is -1.",
+    "The overall loudness of a track in decibels (dB). Loudness values are averaged across the entire track and are useful for comparing relative loudness of tracks. Loudness is the quality of a sound that is the primary psychological correlate of physical strength (amplitude). Values typically range between -60 and 0 db.",
+    "Mode indicates the modality (major or minor) of a track, the type of scale from which its melodic content is derived. Major is represented by 1 and minor is 0.",
+    "Speechiness detects the presence of spoken words in a track. The more exclusively speech-like the recording (e.g. talk show, audiobook, poetry), the closer to 1.0 the attribute value. Values above 0.66 describe tracks that are probably made entirely of spoken words. Values between 0.33 and 0.66 describe tracks that may contain both music and speech, either in sections or layered, including such cases as rap music. Values below 0.33 most likely represent music and other non-speech-like tracks.",
+    "A confidence measure from 0.0 to 1.0 of whether the track is acoustic. 1.0 represents high confidence the track is acoustic.",
+    "Predicts whether a track contains no vocals. \"Ooh\" and \"aah\" sounds are treated as instrumental in this context. Rap or spoken word tracks are clearly \"vocal\". The closer the instrumentalness value is to 1.0, the greater likelihood the track contains no vocal content. Values above 0.5 are intended to represent instrumental tracks, but confidence is higher as the value approaches 1.0.",
+    "Detects the presence of an audience in the recording. Higher liveness values represent an increased probability that the track was performed live. A value above 0.8 provides strong likelihood that the track is live.",
+    "A measure from 0.0 to 1.0 describing the musical positiveness conveyed by a track. Tracks with high valence sound more positive (e.g. happy, cheerful, euphoric), while tracks with low valence sound more negative (e.g. sad, depressed, angry).",
+    "The overall estimated tempo of a track in beats per minute (BPM). In musical terminology, tempo is the speed or pace of a given piece and derives directly from the average beat duration.",
+    "Duration of song in milliseconds"
+  )
+)
+
+# Print the table using knitr
+print(data_dictionary)
+```
+While variables such as valence (how positive a song sounds) and danceability provide some unique and interesting characteristics. A similar study suggests that the numerical attributes most associated with popularity are loudness, acousticness and duration (Vitolo 2023), I made a coorelation chart with all numerical predictors to see if this is the case. 
+
+```{r, echo=FALSE}
+
+library(corrplot)
+corr_data <- spotify_popularity %>%
+  select(track_popularity, danceability, energy, loudness, valence, tempo, duration_ms, liveness, instrumentalness, tempo, speechiness) %>%
+  cor(use = "complete.obs")
+corrplot(corr_data, method = "color")
+
+```
+In this graph we want to focus on the first row and first column which indicate our target variable, track_popularity. A darker blue shade indicated a stronger positive coorelation while a darker red share indicates a stronger negative one. There are not a ton of very dark squares in these two sections, indicating other variables that explain the variability of track_popularity, however we do see that danceability, loudness and valence have slight positive coorelations with popularity and  instrumentalness, energy, duration have slightly negative ones. Danceablity and valence also are fairly strongly coorelated with each other (indicating positive sounding songs are also more danceable) so we may have to consider this in our models down the road. 
+
+### Categorical Variables
+
+Categorical variables also can significantly contribute to track_popularty in this dataset. One of which I wanted to take a look at is genre. In the data, genre is classified as the variable playlist_genre, as these songs were pulled from playlists on spotify that were definied bu an overarching genre and subsequent sub-genres. There were 6 overarching genres; pop, edm, rock, latin, r&b and rap. Here is how their popularity is distributed in both a box and density plot
+
+```{r}
+ggplot(spotify_popularity, aes(x = playlist_genre, y = track_popularity, fill = playlist_genre)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Danceability Across Genres", x = "Genre", y = "Danceability")
+
+ggplot(spotify_popularity, aes(x = track_popularity, fill = playlist_genre)) +
+  geom_density(alpha = 0.6) +
+  labs(title = "Popularity by Genre", x = "Popularity", y = "Density") +
+  theme(legend.position = "bottom")
+```
+
+I find these charts, interesting because the box plot shows that latin and pop have the highest median popularity, but you can also see in the density chart that rock and rap have greater number of songs with higher popularities. In both charts, edm seems to be the overall least popular genre with some outliers with very high popularities. 
+
+Lastly, I was personally interested in how a song's key efects it's popularity. A key in music is kind of like the home base of a song. It indicated the main scale used for the majority of notes within a song's melody and chord structure. There is a lot of psychology behind musical key's I have always been interested in. For example, a casino generally tunes all of it's slot machines to a C major chord as it scientifically is the most please to the human ear. I was interested to know if this also played a role in music listening. Here are some graphic results. 
+
+```{r}
+key_mapping <- c("C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B")
+spotify_popularity$key_label <- key_mapping[spotify_popularity$key + 1]
+
+key_counts <- table(spotify_popularity$key_label)
+
+pie(key_counts, 
+    main = "Proportion of Musical Keys", 
+    col = rainbow(length(key_counts)))
+
+avg_popularity_by_key <- spotify_popularity %>%
+  group_by(key_label) %>%
+  summarize(avg_popularity = mean(track_popularity, na.rm = TRUE))
+
+ggplot(avg_popularity_by_key, aes(x = reorder(key_label, avg_popularity), y = avg_popularity, fill = key_label)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Average Popularity by Musical Key", x = "Key", y = "Average Popularity") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
