@@ -43,7 +43,7 @@ summary(null_model)
 ```{r}
 #simple linear model
 
-simple_model <- lm(track_popularity ~ danceability + energy + valence, data = spotify30k)
+simple_model <- lm(track_popularity ~ danceability + energy + valence, data = spotify_popularity)
 summary(simple_model)
 ```
 ```{r}
@@ -576,4 +576,58 @@ summary(model_with_key_interaction)
 
 #this one is even worse
 ```
+
+```{r}
+lm_model_log_predictors <- lm(track_popularity ~ energy + valence + loudness + instrumentalness + log(duration_ms) + factor(playlist_genre), 
+                              data = spotify_popularity)
+
+# View the summary of the model
+summary(lm_model_log_predictors)
+```
+```{r}
+mixed_model_cross <- lmer(track_popularity ~ energy + valence + loudness + instrumentalness +
+                            duration_ms + (energy | track_artist) + factor(playlist_genre), 
+                          data = spotify_popularity)
+
+summary(mixed_model_cross)
+```
+```{r}
+mixed_model_interaction <- lmer(track_popularity ~ energy * factor(playlist_genre) + valence * loudness + 
+                                  instrumentalness + duration_ms + (1 | track_artist), 
+                                data = spotify_popularity)
+
+summary(mixed_model_interaction)
+```
+
+Logistic regression 
+```{r}
+
+
+
+spotify_popularity$popularity_above_60 <- ifelse(spotify_popularity$track_popularity > 60, 1, 0)
+
+# Fit a logistic regression model
+logistic_model <- glm(popularity_above_60 ~ energy + valence + loudness + instrumentalness +
+                        duration_ms + danceability + factor(playlist_genre),
+                      data = spotify_popularity,
+                      family = binomial)
+
+# View the model summary
+summary(logistic_model)
+```
+```{r}
+library(ggplot2)
+
+odds_ratios <- exp(cbind(Odds_Ratio = coef(logistic_model), confint(logistic_model)))
+odds_ratios_df <- as.data.frame(odds_ratios)
+odds_ratios_df$Variable <- rownames(odds_ratios_df)
+
+ggplot(odds_ratios_df, aes(x = reorder(Variable, Odds_Ratio), y = Odds_Ratio)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = `2.5 %`, ymax = `97.5 %`), width = 0.2) +
+  coord_flip() +
+  labs(title = "Odds Ratios for Logistic Regression", x = "Predictor", y = "Odds Ratio") +
+  theme_minimal()
+```
+
 

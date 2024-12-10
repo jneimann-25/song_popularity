@@ -1,0 +1,145 @@
+---
+title: "Model Appendix"
+author: "Jonathan Neimann"
+date: "2024-12-10"
+output: word_document
+---
+```{r setup, include=FALSE}
+library(ggplot2)
+library(dplyr)
+spotify30k = read.csv("spotify_songs.csv")
+spotify30k <- spotify30k[grepl("[a-zA-Z]", spotify30k$track_artist), ]
+spotify_popularity <- spotify30k[spotify30k$track_popularity >= 5, ]
+```
+
+ # All Model Code and Results 
+ 
+ ## Models From Report with visuals 
+ 
+ ### Null Model
+```{r}
+null_model <- lm(track_popularity ~ 1, data = spotify_popularity)
+summary(null_model)
+plot(null_model)
+```
+
+### First Linear Model 
+
+```{r}
+lm_model <- lm(track_popularity ~ danceability + energy + valence + loudness + instrumentalness + duration_ms, 
+               data = spotify_popularity)
+summary(lm_model)
+plot(lm_model)
+```
+
+### Interaction Linear Model 
+
+```{r}
+lm_model_interaction <- lm(track_popularity ~ 
+                             energy + valence + loudness + instrumentalness + duration_ms +
+                             energy:loudness + valence:energy + instrumentalness:loudness, 
+                           data = spotify_popularity)
+summary(lm_model_interaction)
+plot(lm_model_interaction)
+```
+
+### Linear model with Genre 
+
+```{r}
+lm_model_genre <- lm(track_popularity ~ energy + valence + loudness + instrumentalness + duration_ms + danceability + factor(playlist_genre), 
+                     data = spotify_popularity)
+summary(lm_model_genre)
+plot(lm_model_genre)
+```
+
+ ### Mixed Effects Model 
+ 
+```{r}
+library(lme4)
+mixed_model <- lmer(track_popularity ~ energy + valence + loudness + instrumentalness + duration_ms + danceability + factor(playlist_genre) + 
+                      (1 | track_artist), 
+                    data = spotify_popularity)
+summary(mixed_model)
+```
+ 
+## Additional Models 
+
+### Logistic Regression Model 
+
+```{r}
+spotify_popularity$popularity_above_60 <- ifelse(spotify_popularity$track_popularity > 60, 1, 0)
+
+# Fit a logistic regression model
+logistic_model <- glm(popularity_above_60 ~ energy + valence + loudness + instrumentalness +
+                        duration_ms + danceability + factor(playlist_genre),
+                      data = spotify_popularity,
+                      family = binomial)
+
+# View the model summary
+summary(logistic_model)
+```
+```{r}
+library(ggplot2)
+
+odds_ratios <- exp(cbind(Odds_Ratio = coef(logistic_model), confint(logistic_model)))
+odds_ratios_df <- as.data.frame(odds_ratios)
+odds_ratios_df$Variable <- rownames(odds_ratios_df)
+
+ggplot(odds_ratios_df, aes(x = reorder(Variable, Odds_Ratio), y = Odds_Ratio)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = `2.5 %`, ymax = `97.5 %`), width = 0.2) +
+  coord_flip() +
+  labs(title = "Odds Ratios for Logistic Regression", x = "Predictor", y = "Odds Ratio") +
+  theme_minimal()
+```
+
+### Linear model including "key" attribute 
+
+```{r}
+model_with_key <- lm(track_popularity ~ danceability * energy +
+                                      valence * factor(playlist_genre) +
+                                      instrumentalness +
+                                      loudness +
+                                      acousticness +
+                                      duration_ms +
+                                      factor(key), 
+                     data = spotify_popularity)
+summary(model_with_key)
+```
+
+### Mixed Model with different random effects 
+
+```{r}
+mixed_model_cross <- lmer(track_popularity ~ energy + valence + loudness + instrumentalness +
+                            duration_ms + (energy | track_artist) + factor(playlist_genre), 
+                          data = spotify_popularity)
+summary(mixed_model_cross)
+```
+
+### Mixed Model with interaction terms 
+
+```{r}
+mixed_model_interaction <- lmer(track_popularity ~ energy * factor(playlist_genre) + valence * loudness + 
+                                  instrumentalness + duration_ms + (1 | track_artist), 
+                                data = spotify_popularity)
+summary(mixed_model_interaction)
+```
+
+### Stan Interaction Model and pp check 
+
+```{r}
+library(rstanarm)
+
+stan_interaction_model = stan_glm(track_popularity ~ danceability * energy +
+                        valence * factor(playlist_genre) + loudness +
+                        instrumentalness, data = spotify_popularity, family='gaussian', refresh = 0)
+
+summary(stan_interaction_model)
+
+qqnorm(stan_interaction_model$residuals, main = "Q-Q Plot of Residuals")
+qqline(stan_interaction_model$residuals, col = "red")  # Add reference line
+hist(stan_interaction_model$residuals, main = "Histogram of Residuals", xlab = "Residuals", col = "skyblue", breaks = 30)
+
+pp_check(stan_interaction_model)
+```
+

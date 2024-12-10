@@ -64,12 +64,12 @@ This now gives us a slightly right skewed distribution with a peak near the 50-6
 Looking at the attributes in this dataset we have many to choose from. There are both numerical and categorical variables to consider. Features like tempo, daceability and duration are given as numbers, where as variables like genre, key and artist are categorical. Here is a list of some of the key variables in the datset and what they represent. 
 
 ```{r, echo=FALSE}
-# Load the knitr package
+library(tibble)
 library(knitr)
 
-# Create a data frame for the data dictionary
-data_dictionary <- data.frame(
-  Variable = c(
+# Create the table using tibble
+data_dictionary <- tibble(
+  Attribute = c(
     "track_name", "track_artist", "track_popularity", "track_album_release_date", "playlist_name",
     "playlist_genre", "playlist_subgenre", "danceability", "energy", "key", "loudness", "mode",
     "speechiness", "acousticness", "instrumentalness", "liveness", "valence", "tempo", "duration_ms"
@@ -87,7 +87,7 @@ data_dictionary <- data.frame(
     "The estimated overall key of the track. Integers map to pitches using standard Pitch Class notation . E.g. 0 = C, 1 = C♯/D♭, 2 = D, and so on. If no key was detected, the value is -1.",
     "The overall loudness of a track in decibels (dB). Loudness values are averaged across the entire track and are useful for comparing relative loudness of tracks. Loudness is the quality of a sound that is the primary psychological correlate of physical strength (amplitude). Values typically range between -60 and 0 db.",
     "Mode indicates the modality (major or minor) of a track, the type of scale from which its melodic content is derived. Major is represented by 1 and minor is 0.",
-    "Speechiness detects the presence of spoken words in a track. The more exclusively speech-like the recording (e.g. talk show, audiobook, poetry), the closer to 1.0 the attribute value. Values above 0.66 describe tracks that are probably made entirely of spoken words. Values between 0.33 and 0.66 describe tracks that may contain both music and speech, either in sections or layered, including such cases as rap music. Values below 0.33 most likely represent music and other non-speech-like tracks.",
+    "Speechiness detects the presence of spoken words in a track. The more exclusively speech-like the recording (e.g. talk show, audiobook, poetry), the closer to 1.0 the attribute value. Values above 0.66 describe tracks that are probably made entirely of spoken words. Values between 0.33 and 0.66 describe tracks that may contain both music and speech, either in sections or layered, including such cases as rap music.",
     "A confidence measure from 0.0 to 1.0 of whether the track is acoustic. 1.0 represents high confidence the track is acoustic.",
     "Predicts whether a track contains no vocals. \"Ooh\" and \"aah\" sounds are treated as instrumental in this context. Rap or spoken word tracks are clearly \"vocal\". The closer the instrumentalness value is to 1.0, the greater likelihood the track contains no vocal content. Values above 0.5 are intended to represent instrumental tracks, but confidence is higher as the value approaches 1.0.",
     "Detects the presence of an audience in the recording. Higher liveness values represent an increased probability that the track was performed live. A value above 0.8 provides strong likelihood that the track is live.",
@@ -97,8 +97,9 @@ data_dictionary <- data.frame(
   )
 )
 
-# Print the table using knitr
-print(data_dictionary)
+# Print the table using knitr::kable
+kable(data_dictionary, caption = "Data Dictionary for Spotify Dataset")
+
 ```
 While variables such as valence (how positive a song sounds) and danceability provide some unique and interesting characteristics. A similar study suggests that the numerical attributes most associated with popularity are loudness, acousticness and duration (Vitolo 2023), I made a coorelation chart with all numerical predictors to see if this is the case. 
 
@@ -106,12 +107,14 @@ While variables such as valence (how positive a song sounds) and danceability pr
 
 library(corrplot)
 corr_data <- spotify_popularity %>%
-  select(track_popularity, danceability, energy, loudness, valence, tempo, duration_ms, liveness, instrumentalness, tempo, speechiness) %>%
+  select(track_popularity, danceability, energy, loudness, valence, tempo, duration_ms, liveness, instrumentalness, tempo, speechiness, acousticness) %>%
   cor(use = "complete.obs")
 corrplot(corr_data, method = "color")
 
 ```
 In this graph we want to focus on the first row and first column which indicate our target variable, track_popularity. A darker blue shade indicated a stronger positive coorelation while a darker red share indicates a stronger negative one. There are not a ton of very dark squares in these two sections, indicating other variables that explain the variability of track_popularity, however we do see that danceability, loudness and valence have slight positive coorelations with popularity and  instrumentalness, energy, duration have slightly negative ones. Danceablity and valence also are fairly strongly coorelated with each other (indicating positive sounding songs are also more danceable) so we may have to consider this in our models down the road. 
+
+We also see that acoustics is strongly negatively associated with two other variables. I decided to not include this attribute in the models in this report as it did not improve model performance much
 
 ### Categorical Variables
 
@@ -121,7 +124,7 @@ Categorical variables also can significantly contribute to track_popularty in th
 ggplot(spotify_popularity, aes(x = playlist_genre, y = track_popularity, fill = playlist_genre)) +
   geom_boxplot() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(title = "Danceability Across Genres", x = "Genre", y = "Danceability")
+  labs(title = "Popularity Across Genres", x = "Genre", y = "Danceability")
 
 ggplot(spotify_popularity, aes(x = track_popularity, fill = playlist_genre)) +
   geom_density(alpha = 0.6) +
@@ -174,9 +177,9 @@ If we run an anova test for key in relation to track_popularity we see that the 
 anova_result <- aov(track_popularity ~ as.factor(key), data = spotify_popularity)
 summary(anova_result)
 ```
-## Models 
+# Models 
 
-# Linear Models
+## Linear Models
 
 We are going to start the modeling process with the null model to determine the average popularity among all songs with no predictors. 
 
@@ -199,15 +202,8 @@ summary(lm_model)
 ```
 As expected, our residual standard error decreased to 19.87 for this model, a decrease but not that drastic. We can also see that most of the predictors here are significant (minus danceability), however our R squared is very low at .06. This suggests that only about 6% of the variability in this dataset is represented by this model. 
 
-we can also check for multicollinearity with these predictors by running a VIF test. 
 
-```{r, echo=FALSE}
-library(car)
-vif(lm_model)
-```
-We can see from these results that none of the predictors are coorelated much with each other (which is good). However I am still going to remove danceability from the next model due to it's low significance. 
-
-The next model will add some interaction terms. Energy:loudness and valence:energy, and instrumentalness:loudness
+The next model I added interaction terms. Energy:loudness and valence:energy, and instrumentalness:loudness. I also removed danceability from this due to it's low significance. 
 ```{r, echo=FALSE}
 lm_model_interaction <- lm(track_popularity ~ 
                              energy + valence + loudness + instrumentalness + duration_ms +
@@ -222,7 +218,7 @@ While all of these predictors are significant. Our RSE (19.79) and R squared did
 
 
 
-No we are going to add the categorical variable of playlist_genre and see if that has an effect on model performance. We are going to use the baseline simple linear model (no interaction terms) with playlist_genre now added as a factor 
+Next I wanted to add a categorical variable of playlist_genre and see if that has an effect on model performance. We are going to use the baseline simple linear model (no interaction terms) with playlist_genre now added as a factor. I also reincluded danceability which i will explain.  
 
 ```{r, echo=FALSE}
 lm_model_genre <- lm(track_popularity ~ energy + valence + loudness + instrumentalness + duration_ms + danceability + factor(playlist_genre), 
@@ -234,6 +230,18 @@ summary(lm_model_genre)
 We now see danceability as a significant predictor in this model and the R squared imporve to .08 (still very small). The RSE remains about the same. We also notice a massive negative coorelation with energy of -25.2, indicating that for every one unit increase in energy, we can expect around a 25 point deduction in popularity. 
 
 We also notice how the genres interact with each other. In this model EDM is our reference genre. We know from the previous visualizations that this should be our least popular genre and this model supports that, with all coefficients being positive. We can now compare the Mean Square Error of the three models. 
+
+However why is dancability now significant where it wasn't before and valence is not? The answer is becasue based on our coorelation matrix, danceability and valence have a positive coorelation, indicating that more positive sounding songs are also more danceable. When we added the genre variable, the significance of danceability improves  because playlist_genre helps explain variability that overlaps with danceability. We ca see this in a graph showing dancability accross genres. 
+
+```{r, echo=FALSE}
+ggplot(spotify_popularity, aes(x = danceability, fill = playlist_genre)) +
+  geom_density(alpha = 0.6) +
+  labs(title = "Danceability by Genre", x = "Popularity", y = "Density") +
+  theme(legend.position = "bottom")
+```
+The "undancability" of rock and the high danceability of latin music contribute to that variable now being significant with the genre category added to the model. 
+
+Next I compares the Mean Square Errrors of the thre elinear models. 
 
 ```{r, echo=FALSE}
 # Calculate predictions for each model
@@ -271,10 +279,25 @@ variance_popularity <- var(spotify_popularity$track_popularity)
 cat("Mean of Track Popularity:", mean_popularity, "\n")
 cat("Variance of Track Popularity:", variance_popularity, "\n")
 ```
+### Logistic Regression 
+
+I did runa logistic regression model that I included in the appendix. I used a binary variable based on a threshold of track_popularity being above a score of 60. I did not include this model in the main report as it did not perorm as well as other models. However some key takeaways are:
+
+1. Tracks with high danceability and loudness are more likely to be popular, emphasizing that engaging, upbeat songs resonate better with listeners.
+
+2. Higher instrumentalness and energy negatively impact popularity. This may indicate that excessively energetic or instrumental tracks appeal less to mainstream audiences.
+
+3. Rock has the highest odds ratio, followed by Pop and Latin, indicating that these genres are much more likely to have tracks above the 60-popularity threshold compared to EDM.
+
+4. Tracks with higher danceability are ~2.39 times more likely to achieve high popularity. This suggests that engaging, dance-friendly tracks resonate well with Spotify audiences.
+
+5. Instrumentalness also has a strong negative effect, reducing the odds of popularity by ~82% for every 1-unit increase.
+
+
 
 ### Mixed Effects Model
 
-Now we get to track_artist, what I believe is the real driving force behind the variability of track_popularity. The first thing i want to do is check how much variability this one variable actually acounts for. 
+For the mixed effects model, I wanted to take a look at track_artist, which is what I believe is the real driving force behind the variability of track_popularity. The first thing I did was check how much variability this one variable actually accounts for. 
 
 ```{r, echo=FALSE}
 
@@ -303,7 +326,7 @@ cat("Within-Artist Variance:", within_variance, "\n")
 cat("Proportion of Variance Explained by Artist (Between):", proportion_between, "\n")
 
 ```
-62.2%! That is a lot of variability attributed to one variable. So nect i want to run the model with partial pooling, keeping track_artist as a random effect variable. 
+62.2%! That is a lot of variability attributed to one variable. So next I ran a model with partial pooling, keeping track_artist as a random effect variable. 
 
 ```{r, include=FALSE}
 library(lme4)
@@ -317,13 +340,13 @@ mixed_model <- lmer(track_popularity ~ energy + valence + loudness + instrumenta
 summary(mixed_model)
 
 ```
-I didn't include all the model output but here is the model i ran: 
+I didn't include all the model output (included in apendix) but here is the model i ran: 
 
 mixed_model <- lmer(track_popularity ~ energy + valence + loudness + instrumentalness + duration_ms + danceability + factor(playlist_genre) + (1 | track_artist)
 
 This treats track_artist as a random effects variable, creating a multilevel model as each indivdual track is nested within a particular artist. 
 
-And here are the resulting AIC and BIC comparisons. 
+And here are the resulting AIC and BIC comparisons for the three models. The original linear model, the linear model with genre as a categorial variable and the mixed effects model. 
                   
 ```{r}
 AIC(lm_model, lm_model_genre, mixed_model)
@@ -334,42 +357,48 @@ We see that the AIC and BIC is the lowest for the mixed model we ran. Other resu
 I ran multiple other multilevel models including adding interaction terms, changing the main level to genre, and playing around with random effects. However none of the models really lowered the AIC enough to be worth the extra complexity. 
 
 # Results
-This project aimed to uncover the relationship between Spotify track attributes and their popularity, focusing on both audio features and metadata, such as genre and artist information. Below are the major findings from the analysis:
+
+This project aimed to uncover the relationship between Spotify track attributes and their popularity, focusing on both audio features and categorical variables such as genre and artist information. Below are the major findings from the analysis:
 
 1. Track Popularity Distribution
+
 The initial exploration revealed a large spike in tracks with a popularity score of 0-5, attributed to certain artists having disproportionately low engagement. By filtering out tracks with a popularity score below 5, a more meaningful dataset was created, resulting in a slightly right-skewed distribution of popularity scores ranging from 5 to 100.
 
 2. Correlation Analysis
+
 A correlation heatmap identified several audio attributes with slight correlations to track popularity:
 Positive correlations: Loudness, valence, danceability.
 Negative correlations: Energy, instrumentalness, and duration.
 These correlations suggest that upbeat, positive, and danceable tracks tend to perform better, while longer, more instrumental, or overly energetic tracks are less popular.
 
 3. Genre-Level Analysis
+
 Genre significantly influenced track popularity, as evidenced by the addition of playlist_genre in the models:
 Latin and Pop had the highest average popularity scores, while EDM had the lowest.
-The mixed-effects model confirmed that playlist_genre is a key predictor, with rock, pop, and rap genres showing higher coefficients compared to EDM (the reference genre).
 
 4. Key and Musical Preferences
-Analyzing musical keys revealed that certain keys (e.g., G♯) had higher average popularity, though these results might be influenced by smaller sample sizes for some keys. An ANOVA test confirmed that keys significantly influence popularity, but the effect size was relatively small compared to residual variability.
+
+Analyzing musical keys revealed that certain keys (e.g., G♯) had higher average popularity, though these results might be influenced by smaller sample sizes for some keys. An ANOVA test confirmed that keys can influence popularity, but the effect size was relatively small compared to residual variability.
 
 5. Linear Models
+
 Several linear models were tested:
-The baseline model with no predictors had a mean popularity estimate of 48.69 and a residual standard error (RSE) of 20.52.
-Adding predictors like loudness, valence, energy, instrumentalness, and duration improved the RSE to 19.87, but the model explained only ~6% of the variance (R² = 0.063).
-Adding interaction terms (e.g., energy:loudness) provided minor improvements (RSE = 19.79, R² = 0.07).
-Including playlist_genre significantly improved the model, with the lowest MSE (385.8) among all linear models tested.
+- The baseline Null model with no predictors had a mean popularity estimate of 48.69 and a residual standard error (RSE) of 20.52.
+- Adding predictors like loudness, valence, energy, instrumentalness, and duration improved the RSE to 19.87, but the model explained only ~6% of the variance (R² = 0.063).
+- Adding interaction terms (e.g., energy:loudness) provided minor improvements (RSE = 19.79, R² = 0.07).
+- Including playlist_genre significantly improved the model, with the lowest MSE (385.8) among all linear models tested.
 
 6. Mixed-Effects Model
-Treating track_artist as a random effect in a mixed-effects model significantly improved performance:
-AIC/BIC Comparison: The mixed-effects model had the lowest AIC (244,911) and BIC (245,027), outperforming all linear models.
-Variance Analysis: Track artist accounted for 62.3% of the total variance in track popularity, highlighting its importance.
-Fixed effects in the mixed model showed:
-Strong negative effects for energy (-2.83) and instrumentalness (-1.00).
-Positive effects for loudness (2.42) and danceability (0.59).
-Genre-level differences were pronounced, with genres like rock and pop significantly outperforming EDM.
 
-# Discussion
+Treating track_artist as a random effect in a mixed-effects model significantly improved performance:
+- The mixed-effects model had the lowest AIC (244,911) and BIC (245,027), outperforming all linear models.
+- Track artist accounted for 62.3% of the total variance in track popularity, highlighting its importance.
+Fixed effects in the mixed model showed:
+- Strong negative effects for energy (-2.83) and instrumentalness (-1.00).
+- Positive effects for loudness (2.42) and danceability (0.59).
+- Genre-level differences were pronounced, with genres like rock and pop significantly outperforming EDM.
+
+# Discussion and Validation 
 
 ### Key Insights
 
@@ -381,28 +410,19 @@ Genre as a Significant Predictor:
 
 While playlist_genre improved model performance, the mixed model indicated that genre alone does not explain much variance when compared to artist-level effects. However, rock and pop tracks consistently outperformed EDM, aligning with general trends in music consumption.
 
-Impact of Track-Level Features:
+Impact of Track-Level Features Validation:
 
-Loudness, danceability, and valence positively influenced popularity, supporting the idea that energetic and positive-sounding tracks resonate better with audiences. However, these effects were relatively small, highlighting the complexity of predicting track success.
+The Vitolo Thesis indicated that loudness is the most important factor in determining track popularity and my study also confirmed this. Loudness, danceability, and valence positively influenced popularity, supporting the idea that energetic and positive-sounding tracks resonate better with audiences. However, these effects were relatively small, highlighting the complexity of predicting track success. The thesis also states that duration has a strong negative effect on popularity, wwhich is somehat supported by my findings. Duration_ms has a significant but relatively modest effect on track popularity compared to other predictors. Its impact is consistent across models, but variables like energy, loudness, and playlist_genre contribute more substantially to explaining the variability in track popularity. This suggests that while duration matters, it is not a primary driver of popularity and is more context-dependent. However there is probably a baseline threshold song length for when this starts to go down that I did not explore 
 
-Musical Key:
+In the paper "What makes a Song Trend" the authors also verify lively, upbeat songs as being the most popular, stating "The most popular songs tend to be the more exciting, radio friendly songs...These songs follow a formulaic, pop-friendly sound, with a danceable music structure that tends to put the audience in a good mood." This paper also states the uncertainty of these variables through cluster analysis as well, stating that the musical artist of each song plays an important aspect, similar to what i discovered here as well. 
 
-Despite some keys showing higher average popularity, key alone was not a strong predictor. This aligns with the idea that modern audiences might not consciously prefer certain musical keys over others in the streaming era.
 
-Limitations
-Dataset Bias: Filtering out tracks with popularity <5 introduced bias, potentially excluding niche or experimental tracks that still have value.
-Simplistic Genre Classification: Broad genres (e.g., "Pop") might oversimplify the diversity within each category, missing nuances like subgenre or cultural context.
-Lack of Temporal Data: The analysis did not account for the temporal dynamics of popularity (e.g., how a song's popularity evolves over time).
-Future Directions
-Time-Series Analysis:
-Incorporate temporal data (e.g., release date, playlist additions) to explore how track popularity changes over time and identify trends.
-More Granular Genre Analysis:
-Investigate subgenres to better understand the nuanced relationship between genre and popularity.
-Artist-Level Predictors:
-Explore additional artist-level predictors, such as follower count or album success, to enhance the mixed-effects model.
-Audience-Specific Insights:
-Use demographic or geographic data (if available) to investigate how preferences differ across listener groups.
-By combining these directions with the insights gained from this study, future research could provide a more comprehensive understanding of what drives Spotify track popularity. Let me know if you'd like to refine or add to these sections!
+
+
+### Limitations and Future Steps
+This study provided some insights into the factors influencing Spotify track popularity. However, there are notable limitations that suggest areas for improvement and future research directions. First, the dataset was filtered to exclude tracks with popularity scores below 5, which introduced potential bias. This filtering may have excluded niche or experimental tracks that, while less popular, could still hold significant cultural or artistic value. Additionally, the classification of genres was relatively broad (e.g., "Pop" or "Rock"), which might oversimplify the diversity within these categories. Nuances such as subgenres or cultural contexts were not captured, potentially obscuring finer details in genre-based popularity trends. Lastly, this analysis did not incorporate temporal data, such as release dates or playlist additions, which could reveal how track popularity evolves over time.
+
+Future research and improvements to determine which track components really do affect popularity would be to maybe look at a datset containing all one artist. That way we wuould be able to compare their individual songs against each other rather than use a random sample taken from many different artists. To get really into the weeds, we could also integrate demographic or geographic data, as it could offer audience-specific insights, shedding light on how preferences vary across listener groups and regions. These future directions, combined with the findings of this study, could provide a more comprehensive and nuanced understanding of what drives Spotify track popularity.
 
 
 

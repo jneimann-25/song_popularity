@@ -1,0 +1,119 @@
+---
+title: "Additional Code"
+author: "Jonathan Neimann"
+date: "2024-12-10"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(dplyr)
+library(lme4)
+spotify30k = read.csv("spotify_songs.csv")
+spotify30k <- spotify30k[grepl("[a-zA-Z]", spotify30k$track_artist), ]
+spotify_popularity <- spotify30k[spotify30k$track_popularity >= 5, ]
+lm_model_genre <- lm(track_popularity ~ energy + valence + loudness + instrumentalness + duration_ms + danceability + factor(playlist_genre), 
+                     data = spotify_popularity)
+lm_model_interaction <- lm(track_popularity ~ 
+                             energy + valence + loudness + instrumentalness + duration_ms +
+                             energy:loudness + valence:energy + instrumentalness:loudness, 
+                           data = spotify_popularity)
+lm_model <- lm(track_popularity ~ danceability + energy + valence + loudness + instrumentalness + duration_ms, 
+               data = spotify_popularity)
+mixed_model <- lmer(track_popularity ~ energy + valence + loudness + instrumentalness + duration_ms + danceability + factor(playlist_genre) + 
+                      (1 | track_artist), 
+                    data = spotify_popularity)
+```
+
+# Additional Code
+
+### Popularity means by genre 
+
+```{r}
+spotify_popularity %>%
+  group_by(playlist_genre) %>%
+  summarize(
+    n = n(),
+    avg_popularity = mean(track_popularity, na.rm = TRUE)
+  ) %>%
+  arrange(desc(avg_popularity))
+```
+
+### ANOVA Test
+
+```{r}
+anova_result <- aov(track_popularity ~ as.factor(key), data = spotify_popularity)
+summary(anova_result)
+```
+
+### Mean Square Error for models 
+
+```{r}
+# Calculate predictions for each model
+original_predictions <- predict(lm_model, spotify_popularity)
+interaction_predictions <- predict(lm_model_interaction, spotify_popularity)
+genre_predictions <- predict(lm_model_genre, spotify_popularity)
+
+# Calculate residuals for each model
+original_residuals <- spotify_popularity$track_popularity - original_predictions
+interaction_residuals <- spotify_popularity$track_popularity - interaction_predictions
+genre_residuals <- spotify_popularity$track_popularity - genre_predictions
+
+# Calculate MSE for each model
+original_mse <- mean(original_residuals^2)
+interaction_mse <- mean(interaction_residuals^2)
+genre_mse <- mean(genre_residuals^2)
+
+# Print the MSE values
+cat("MSE for Original Model:", original_mse, "\n")
+cat("MSE for Interaction Model:", interaction_mse, "\n")
+cat("MSE for Model with Playlist Genre:", genre_mse, "\n")
+```
+
+### Mean vs Varience for poisson 
+
+```{r}
+mean_popularity <- mean(spotify_popularity$track_popularity)
+variance_popularity <- var(spotify_popularity$track_popularity)
+
+# Print the results
+cat("Mean of Track Popularity:", mean_popularity, "\n")
+cat("Variance of Track Popularity:", variance_popularity, "\n")
+```
+
+### Track Artist poportion on Varience 
+
+```{r}
+spotify_popularity <- spotify_popularity %>%
+  mutate(across(c(energy, valence, loudness, instrumentalness, duration_ms, danceability), scale))
+# Calculate the overall variance in track_popularity
+total_variance <- var(spotify_popularity$track_popularity)
+
+# Calculate the mean popularity for each artist
+artist_means <- aggregate(track_popularity ~ track_artist, data = spotify_popularity, FUN = mean)
+
+# Calculate variance between artists
+between_variance <- var(artist_means$track_popularity)
+
+# Calculate variance within artists
+within_variance <- total_variance - between_variance
+
+# Proportion of variance explained by artist
+proportion_between <- between_variance / total_variance
+proportion_within <- within_variance / total_variance
+
+# Print results
+cat("Total Variance:", total_variance, "\n")
+cat("Between-Artist Variance:", between_variance, "\n")
+cat("Within-Artist Variance:", within_variance, "\n")
+cat("Proportion of Variance Explained by Artist (Between):", proportion_between, "\n")
+```
+
+### AIC & BIC Comparison 
+
+```{r}
+AIC(lm_model, lm_model_genre, mixed_model)
+BIC(lm_model, lm_model_genre, mixed_model)
+```
+
